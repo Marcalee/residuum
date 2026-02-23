@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TileWord – Drag & Drop + Dictionary Loader</title>
+  <style>
+    :root{
+      --bg:#0f1216; --panel:#151a20; --line:#222a35; --ink:#e6edf3; --muted:#9aa7b5;
+      --tile:#161d26; --tileSel:#1a3347; --stroke:#2a3442;
+      --accent:rgba(139,211,255,0.85);
+      --good:#7dffb2; --bad:#ff8b8b;
+    }
+    html,body{height:100%; margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:var(--ink);}
+    .wrap{max-width:1120px; margin:0 auto; padding:16px;}
+    .row{display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap;}
+    canvas{background:#0b0e12; border:1px solid var(--line); border-radius:14px; box-shadow:0 8px 24px rgba(0,0,0,0.35); touch-action:none;}
+    .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px; box-shadow:0 8px 24px rgba(0,0,0,0.25); min-width:350px;}
+    .stats{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;}
+    .stat{background:#11161d; border:1px solid var(--line); border-radius:12px; padding:10px;}
+    .stat .k{font-size:12px; color:var(--muted);}
+    .stat .v{font-size:18px; font-weight:850; margin-top:2px;}
+    .controls{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;}
+    button{background:#11161d; border:1px solid #2a3442; color:var(--ink); padding:10px 12px; border-radius:12px; cursor:pointer; font-weight:760;}
+    button:hover{border-color:#3b4a5f;}
+    button.primary{background:#13202b; border-color:#27465f; color:#d9f1ff;}
+    button:disabled{opacity:0.45; cursor:not-allowed;}
+
+    .trayWrap{margin-top:8px;}
+    .trayHeader{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin:6px 0;}
+    .trayHeader .hint{font-size:12px; color:var(--muted);}
+    .tray{display:grid; grid-template-columns:repeat(7, 1fr); gap:8px; padding:10px; background:#10151c; border:1px solid var(--line); border-radius:12px; user-select:none;}
+    .slot{height:44px; border-radius:12px; border:1px dashed #2a3442; display:flex; align-items:center; justify-content:center; color:#90a0b3; position:relative; user-select:none;}
+    .slot.filled{border-style:solid; border-color:#2a3442; background:#1f2630; color:var(--ink); font-weight:900;}
+    .slot .tag{position:absolute; left:8px; top:6px; font-size:10px; color:#9aa7b5; opacity:0.85; font-weight:800;}
+    .slot .mini{position:absolute; right:8px; bottom:6px; font-size:10px; color:#a9b8c8; opacity:0.75;}
+    .slot.filled:hover{outline:2px solid rgba(139,211,255,0.35);}
+
+    .msg{margin-top:10px; padding:10px 12px; border-radius:12px; border:1px solid #2a3442; background:#0f151c; color:#cfe6f6;}
+    .msg.good{border-color:#2d6248; background:#0f1b14; color:#d7ffe8;}
+    .msg.bad{border-color:#6a2d2d; background:#1b0f10; color:#ffd7d7;}
+
+    .rules{margin-top:10px; font-size:12px; color:#a6b3c0; line-height:1.35;}
+    .rules code{background:#0f151c; border:1px solid #273141; border-radius:8px; padding:1px 6px;}
+
+    .dictRow{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:8px 0 2px;}
+    .dictRow label{font-size:12px; color:var(--muted);}
+    .dictRow input[type="file"]{font-size:12px; color:var(--muted);}
+    .pill{font-size:12px; color:var(--muted); border:1px solid var(--line); background:#10151c; padding:6px 10px; border-radius:999px;}
+  
+    /* Residua scoreline */
+    .residuaLineWrap{margin:10px 0 6px; padding:8px 10px; border-radius:14px; border:1px solid #2a3442; background:#0f151c;}
+    .residuaLine{position:relative; height:10px; border-radius:999px; background:rgba(255,255,255,0.06); overflow:hidden;}
+    .residuaZero{position:absolute; left:50%; top:0; bottom:0; width:2px; background:rgba(230,237,243,0.35);}
+    .residuaPos{position:absolute; left:50%; top:0; bottom:0; width:0px; background:rgba(125,255,178,0.9); box-shadow:0 0 10px rgba(125,255,178,0.25);}
+    .residuaNeg{position:absolute; right:50%; top:0; bottom:0; width:0px;
+      background:linear-gradient(90deg,
+        rgba(255,69,92,0.95) 0%,
+        rgba(255,140,0,0.95) 25%,
+        rgba(255,235,59,0.95) 55%,
+        rgba(139,195,74,0.95) 100%);
+      background-size:220% 100%;
+      background-position:40% 0%;
+      opacity:0.80;
+      filter: blur(1.2px) saturate(1.15);
+      box-shadow:0 0 14px rgba(255,160,0,0.18);
+    }
+    .residuaMini{margin-top:6px; font-size:11px; color:#a6b3c0; opacity:0.95; letter-spacing:0.2px;}
+
+  
+    /* ===== Residua: clean layout (board defines margins) ===== */
+    .residuaClean{
+      width: min(94vw, 640px);
+      margin: 16px auto 28px;
+      padding: 0;
+      display:flex;
+      flex-direction:column;
+      gap: 10px;
+    }
+    .residuaClean .topStrip{
+      display:flex;
+      flex-direction:column;
+      gap: 8px;
+    }
+    .residuaClean .stats{
+      display:flex;
+      flex-wrap:wrap;
+      justify-content:space-between;
+      gap: 10px 14px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--stroke);
+      background: var(--panel);
+    }
+    .residuaClean .stat{display:flex; gap:8px; align-items:baseline; min-width:92px;}
+    .residuaClean .stat .k{font-size:11px; color:var(--muted);}
+    .residuaClean .stat .v{font-size:14px; font-weight:700; color:var(--ink);}
+
+    /* Canvas full width and slightly larger */
+    canvas#c{
+      width: 100%;
+      height: auto;
+      display:block;
+      border-radius: 16px;
+      border: 1px solid var(--stroke);
+      background: radial-gradient(120% 120% at 50% 0%, rgba(139,211,255,0.06) 0%, rgba(0,0,0,0) 55%), var(--panel);
+    }
+
+    /* Scoreline aligned to board width */
+    .residuaLineWrap{margin:0; padding:10px 12px; border-radius:14px;}
+
+    /* Tray: soft light green "go" field */
+    .trayWrap{
+      padding: 12px 12px 10px;
+      border-radius: 16px;
+      border: 1px solid rgba(125,255,178,0.24);
+      background:
+        linear-gradient(180deg,
+          rgba(125,255,178,0.14) 0%,
+          rgba(125,255,178,0.07) 55%,
+          rgba(21,26,32,0.98) 100%);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.22);
+    }
+    .trayHeader{display:flex; justify-content:space-between; gap:12px; align-items:flex-start;}
+    .trayHeader .hint{color: rgba(28, 44, 36, 0.92);}
+    .tray{
+      margin-top: 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(28,44,36,0.22);
+      background: rgba(15,18,22,0.55);
+    }
+
+    /* Feedback below tray */
+    .msg{
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--stroke);
+      background: var(--panel);
+    }
+
+    /* Controls spread evenly across board width */
+    .controlsRow .controls{
+      display:flex;
+      gap: 10px;
+      width: 100%;
+    }
+    .controlsRow .controls button{
+      flex: 1 1 0;
+      justify-content:center;
+      text-align:center;
+      padding: 12px 10px;
+      border-radius: 14px;
+    }
+
+    /* Dict row stays quiet under stats */
+    .dictRow{
+      display:flex;
+      align-items:center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--stroke);
+      background: rgba(21,26,32,0.72);
+    }
+
+    /* Rules at bottom */
+    .rules{
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--stroke);
+      background: rgba(21,26,32,0.70);
+      color: rgba(230,237,243,0.82);
+    }
+
+  
+    /* Dict row (kept minimal, aligned) */
+    .dictRow{
+      display:flex;
+      align-items:center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--stroke);
+      background: rgba(21,26,32,0.72);
+    }
+    .dictRow label{font-size:12px; color:var(--muted);}
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      padding: 6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(230,237,243,0.16);
+      background: rgba(17,22,29,0.85);
+      font-size:12px;
+      color: rgba(230,237,243,0.88);
+    }
+
+  </style>
+</head>
+
+<body>
+  <div class="wrap residuaClean">
+    <div class="topStrip">
+      <div class="stats">
+        <div class="stat"><div class="k">Round</div><div class="v" id="round">1</div></div>
+        <div class="stat"><div class="k">Score</div><div class="v" id="score">0</div></div>
+        <div class="stat"><div class="k">Tray</div><div class="v" id="trayCt">0</div></div>
+        <div class="stat"><div class="k">Selection</div><div class="v" id="selCt">0</div></div>
+      
+</div>
+      <div class="dictRow">
+        <label>Dictionaries:</label>
+        <span class="pill" id="dictInfo">(loading…)</span>
+        <input id="dictFile" type="file" accept=".txt" style="display:none" disabled/>
+      </div>
+    </div>
+
+    <canvas id="c" width="640" height="640"></canvas>
+
+    <!-- Residua scoreline (net vs spend) -->
+      <div class="residuaLineWrap" aria-label="Residua scoring bar">
+        <div class="residuaLine">
+          <div class="residuaZero" title="0"></div>
+          <div class="residuaPos" id="residuaPos" title="Net score (right)"></div>
+          <div class="residuaNeg" id="residuaNeg" title="Spent / disturbance (left)"></div>
+        </div>
+        <div class="residuaMini" id="residuaMini">net 0 • spent 0</div>
+      </div>
+
+    <div class="trayWrap">
+        <div class="trayHeader">
+          <div class="hint">Drag tiles <b>to</b> tray (save) and <b>back</b> to board (swap/place). Unlimited swaps.</div>
+          <div class="hint">Cap: <b>5</b> singles + <b>2</b> digraphs</div>
+        </div>
+        <div class="tray" id="tray"></div>
+      </div>
+
+    <div class="msg" id="msg">Loading dictionaries… Drag tray tiles onto the board to swap (no submission required).</div>
+
+    <div class="controlsRow">
+      <div class="controls">
+
+        <button class="primary" id="btnSubmit" disabled>Submit</button>
+        <button id="btnClear" disabled>Clear</button>
+        <button id="btnRestart">Restart</button>
+      </div>
+    </div>
+
+    <div class="rules">
+        <b>Rules</b><br/>
+        • Build a <b>connected</b> path (8-way). No repeats. (2+ tiles)<br/>
+        • Dictionary word: <code>+10 × tiles</code> plus bonus <code>+5 × (letters)²</code> (digraphs count as 2 letters).<br/>
+        • Non-word clears space but costs <code>−10 × tiles</code>.<br/>
+      </div>
+    </div>
+  </div>
+</div>
+  </div>
+</body>
+
+</html>

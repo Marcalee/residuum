@@ -1,0 +1,1116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TileWord – Drag & Drop + Dictionary Loader</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --panel:#0e1a2f;
+      --line:#1b2f4d;
+      --ink:#e6edf3;
+      --muted:#a9b8c8;
+
+      /* board + tile palette */
+      --board:#1f3a5f;
+      --stroke:#2a4b73;
+      --tile:#8f9d63;          /* play-board tiles (slightly deeper) */
+      --tileSel:#203d5a;       /* selected tile */
+      --trayTile:#c4d08a;      /* saved-tray tiles (brighter than board tiles) */
+
+      --accent:rgba(139,211,255,0.85);
+      --good:#7dffb2;
+      --bad:#ff8b8b;
+    }
+    html,body{height:100%; margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:var(--ink);}
+    .wrap{max-width:1120px; margin:0 auto; padding:16px;}
+    .row{display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap;}
+    canvas{background:var(--board); border:1px solid var(--line); border-radius:14px; box-shadow:0 8px 24px rgba(0,0,0,0.35); touch-action:none;}
+    .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px; box-shadow:0 8px 24px rgba(0,0,0,0.25); min-width:350px;}
+    .stats{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;}
+    .stat{background:rgba(7,12,22,0.55); border:1px solid var(--line); border-radius:12px; padding:10px;}
+    .stat .k{font-size:12px; color:var(--muted);}
+    .stat .v{font-size:18px; font-weight:850; margin-top:2px;}
+    .controls{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;}
+    button{background:#2a67a6; border:1px solid var(--stroke); color:var(--ink); padding:10px 12px; border-radius:12px; cursor:pointer; font-weight:760;}
+    button:hover{border-color:#3b4a5f;}
+    button.primary{background:#0b1d33; border-color:var(--stroke); color:#d9f1ff;}
+    button:disabled{opacity:0.45; cursor:not-allowed;}
+
+    .trayWrap{margin-top:8px;}
+    .trayHeader{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin:6px 0;}
+    .trayHeader .hint{font-size:12px; color:var(--muted);}
+    .tray{display:grid; grid-template-columns:repeat(7, 1fr); gap:8px; padding:10px; background:rgba(7,12,22,0.45); border:1px solid var(--line); border-radius:12px; user-select:none;}
+    .slot{height:44px; border-radius:12px; border:1px dashed rgba(230,237,243,0.18); display:flex; align-items:center; justify-content:center; color:rgba(230,237,243,0.65); position:relative; user-select:none;}
+    .slot .tag{position:absolute; left:8px; top:6px; font-size:10px; color:rgba(9,17,28,0.6); opacity:0.95; font-weight:850;}
+    .slot .mini{position:absolute; right:8px; bottom:6px; font-size:10px; color:rgba(9,17,28,0.55); opacity:0.95;}
+.slot.filled{border-style:solid; border-color:rgba(42,75,115,0.85); background:var(--trayTile); color:#09111c; font-weight:950;}
+    .slot.filled:hover{outline:none;}
+
+    .msg{margin-top:10px; padding:10px 12px; border-radius:12px; border:1px solid var(--stroke); background:rgba(7,12,22,0.55); color:rgba(230,237,243,0.92);}
+    .msg.good{border-color:#2d6248; background:#0f1b14; color:#d7ffe8;}
+    .msg.bad{border-color:#6a2d2d; background:#1b0f10; color:#ffd7d7;}
+
+    .rules{margin-top:10px; font-size:12px; color:rgba(169,184,200,0.95); line-height:1.35;}
+    .rules code{background:#0f151c; border:1px solid #273141; border-radius:8px; padding:1px 6px;}
+
+    .dictRow{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:8px 0 2px;}
+    .dictRow label{font-size:12px; color:var(--muted);}
+    .dictRow input[type="file"]{font-size:12px; color:var(--muted);}
+    .pill{font-size:12px; color:var(--muted); border:1px solid var(--line); background:#10151c; padding:6px 10px; border-radius:999px;}
+  
+    /* Residua scoreline */
+    .residuaLineWrap{margin:10px 0 6px; padding:8px 10px; border-radius:14px; border:1px solid #2a3442; background:#0f151c;}
+    .residuaLine{position:relative; height:10px; border-radius:999px; background:rgba(255,255,255,0.06); overflow:hidden;}
+    .residuaZero{position:absolute; left:50%; top:0; bottom:0; width:2px; background:rgba(230,237,243,0.35);}
+    .residuaPos{position:absolute; left:50%; top:0; bottom:0; width:0px; background:rgba(125,255,178,0.9); box-shadow:0 0 10px rgba(125,255,178,0.25);}
+    .residuaNeg{position:absolute; right:50%; top:0; bottom:0; width:0px;
+      background:linear-gradient(90deg,
+        rgba(255,69,92,0.95) 0%,
+        rgba(255,140,0,0.95) 25%,
+        rgba(255,235,59,0.95) 55%,
+        rgba(139,195,74,0.95) 100%);
+      background-size:220% 100%;
+      background-position:40% 0%;
+      opacity:0.80;
+      filter: blur(1.2px) saturate(1.15);
+      box-shadow:0 0 14px rgba(255,160,0,0.18);
+    }
+    .residuaMini{margin-top:6px; font-size:11px; color:#a6b3c0; opacity:0.95; letter-spacing:0.2px;}
+
+  
+/* ===== Residua clean layout (scrubbed, rendering-safe) ===== */
+.wrap.residuaClean{
+  width: min(94vw, 640px);
+  margin: 16px auto 28px;
+  padding: 0;
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+}
+.wrap.residuaClean .topStrip{display:flex; flex-direction:column; gap:8px;}
+.wrap.residuaClean .stats{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:space-between;
+  gap: 10px 14px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--stroke);
+  background: var(--panel);
+  margin: 0;
+}
+.wrap.residuaClean .stat{
+  background: transparent;
+  border: none;
+  padding: 0;
+  min-width: 92px;
+}
+.wrap.residuaClean .stat .k{font-size:11px; color:var(--muted);}
+.wrap.residuaClean .stat .v{font-size:14px; font-weight:800; margin-top:2px;}
+
+.wrap.residuaClean .dictRow{
+  margin: 0;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding: 8px 12px;
+  border-radius:14px;
+  border:1px solid var(--stroke);
+  background: rgba(21,26,32,0.72);
+}
+
+.wrap.residuaClean canvas#c{
+  width: 100%;
+  height: auto;
+  display:block;
+  border-radius: 16px;
+  border: 1px solid var(--stroke);
+}
+
+.wrap.residuaClean .residuaLineWrap{margin:0; padding:10px 12px; border-radius:14px;}
+
+.wrap.residuaClean .trayWrap{
+  margin-top: 0;
+  padding: 12px 12px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--stroke);
+  background: rgba(14,26,47,0.78);
+  box-shadow: none;
+}
+.wrap.residuaClean .trayHeader .hint{color: rgba(230,237,243,0.82);}
+.wrap.residuaClean .tray{
+  background: rgba(7,12,22,0.40);
+  border-color: rgba(27,47,77,0.85);
+}
+
+.wrap.residuaClean .msg{
+  margin-top: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--stroke);
+  background: var(--panel);
+}
+
+.wrap.residuaClean .controlsRow .controls{
+  margin: 0;
+  width: 100%;
+  display:flex;
+  gap: 10px;
+}
+.wrap.residuaClean .controlsRow .controls button{
+  flex: 1 1 0;
+  justify-content:center;
+  text-align:center;
+  padding: 12px 10px;
+  border-radius: 14px;
+}
+
+.wrap.residuaClean .rules{
+  margin-top: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--stroke);
+  background: rgba(21,26,32,0.70);
+}
+
+</style>
+
+<style>
+#submitButton {
+    background: #2e7d32;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.05s ease;
+}
+#submitButton:hover {
+    background: #388e3c;
+}
+#submitButton:active {
+    transform: scale(0.98);
+}
+</style>
+
+</head>
+
+<body>
+  <div class="wrap residuaClean">
+    <div class="topStrip">
+      <div class="stats">
+        <div class="stat"><div class="k">Round</div><div class="v" id="round">1</div></div>
+        <div class="stat"><div class="k">Score</div><div class="v" id="score">0</div></div>
+        <div class="stat"><div class="k">Tray</div><div class="v" id="trayCt">0</div></div>
+        <div class="stat"><div class="k">Selection</div><div class="v" id="selCt">0</div></div>
+      
+</div>
+      <div class="dictRow">
+        <label>Dictionaries:</label>
+        <span class="pill" id="dictInfo">(loading…)</span>
+        <input id="dictFile" type="file" accept=".txt" style="display:none" disabled/>
+      </div>
+    </div>
+
+    <canvas id="c" width="640" height="640"></canvas>
+
+    <!-- Residua scoreline (net vs spend) -->
+<div class="residuaLineWrap" aria-label="Residua scoring bar">
+        <div class="residuaLine">
+          <div class="residuaZero" title="0"></div>
+          <div class="residuaPos" id="residuaPos" title="Net score (right)"></div>
+          <div class="residuaNeg" id="residuaNeg" title="Spent / disturbance (left)"></div>
+        </div>
+        <div class="residuaMini" id="residuaMini">net 0 • spent 0</div>
+      </div>
+
+    <div class="trayWrap">
+        <div class="trayHeader">
+          <div class="hint">Drag tiles <b>to</b> tray (save) and <b>back</b> to board (swap/place). Unlimited swaps.</div>
+          <div class="hint">Cap: <b>5</b> singles + <b>2</b> digraphs</div>
+        </div>
+        <div class="tray" id="tray"></div>
+      </div>
+
+    <div class="msg" id="msg">Loading dictionaries… Drag tray tiles onto the board to swap (no submission required).</div>
+
+    <div class="controlsRow">
+      <div class="controls">
+
+        <button class="primary" id="btnSubmit" disabled>Submit</button>
+        <button id="btnClear" disabled>Clear</button>
+        <button id="btnRestart">Restart</button>
+      </div>
+    </div>
+
+    <div class="rules">
+        <b>Rules</b><br/>
+        • Build a <b>connected</b> path (8-way). No repeats. (2+ tiles)<br/>
+        • Dictionary word: <code>+10 × tiles</code> plus bonus <code>+5 × (letters)²</code> (digraphs count as 2 letters).<br/>
+        • Non-word clears space but costs <code>−10 × tiles</code>.<br/>
+      </div>
+  </div>
+
+  <script>
+(async () => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  const ui = {
+    round: document.getElementById('round'),
+    score: document.getElementById('score'),
+    trayCt: document.getElementById('trayCt'),
+    selCt: document.getElementById('selCt'),
+    tray: document.getElementById('tray'),
+    msg: document.getElementById('msg'),
+    btnSubmit: document.getElementById('btnSubmit'),
+    btnClear: document.getElementById('btnClear'),
+    btnRestart: document.getElementById('btnRestart'),
+    dictFile: document.getElementById('dictFile'),
+    dictInfo: document.getElementById('dictInfo'),
+  };
+
+  
+  // --- Residua scoreline telemetry (session-style) ---
+  const residua = {
+    earned: 0,
+    spent: 0,
+    heat: 0,          // decays asymptotically
+    maxSpan: 200,     // dynamic scaling anchor
+  };
+
+  const residuaEls = {
+    pos: document.getElementById('residuaPos'),
+    neg: document.getElementById('residuaNeg'),
+    mini: document.getElementById('residuaMini'),
+  };
+
+  function residuaReset(){
+    residua.earned = 0;
+    residua.spent = 0;
+    residua.heat = 0;
+    residua.maxSpan = 200;
+    residuaRender();
+  }
+
+  function residuaApplyDelta(delta){
+    if(delta > 0){
+      residua.earned += delta;
+      // cooling (asymptotic): never snaps to zero
+      residua.heat *= 0.975;
+    } else if(delta < 0){
+      const cost = Math.abs(delta);
+      residua.spent += cost;
+      // heat adds, but later progress can "cool" the palette by dilution
+      residua.heat = residua.heat * 0.99 + cost * 0.018;
+    }
+    // scaling anchor: keep line visually present
+    const net = Math.max(0, score);
+    residua.maxSpan = Math.max(residua.maxSpan, net, residua.spent, 120);
+    residuaRender();
+  }
+
+  function residuaRender(){
+    if(!residuaEls.pos || !residuaEls.neg || !residuaEls.mini) return;
+
+    const line = residuaEls.pos.parentElement; // .residuaLine
+    const w = line.getBoundingClientRect().width;
+    const half = w * 0.48; // leave a little margin from edges
+
+    const net = Math.max(0, score);
+    const span = Math.max(1, residua.maxSpan);
+
+    const posPx = Math.min(half, (net / span) * half);
+    const negPx = Math.min(half, (residua.spent / span) * half);
+
+    residuaEls.pos.style.width = posPx.toFixed(1) + "px";
+    residuaEls.neg.style.width = negPx.toFixed(1) + "px";
+
+    // Temperature is "spent heat" diluted by earned progress (style, not punishment)
+    const dilution = 1 + (residua.earned * 0.004);
+    const temp = Math.max(0, Math.min(1, (residua.heat / dilution) / 10)); // 0..1-ish
+
+    // Shift gradient with forward progress: more progress nudges spectrum toward greener end
+    const progressNudge = Math.max(0, Math.min(1, net / (span || 1)));
+    const pos = 20 + (progressNudge * 55) - (temp * 30); // 0..100 range-ish
+    residuaEls.neg.style.backgroundPosition = `${Math.max(0, Math.min(100, pos)).toFixed(0)}% 0%`;
+
+    // Presence: not too fuzzy; blur/opacity reflect style intensity
+    const opacity = 0.55 + temp * 0.45;
+    residuaEls.neg.style.opacity = opacity.toFixed(2);
+    residuaEls.neg.style.filter = `blur(${(1.0 + temp*1.2).toFixed(2)}px) saturate(${(1.05 + temp*0.45).toFixed(2)})`;
+
+    residuaEls.mini.textContent = `net ${net} • spent ${residua.spent}`;
+  }
+// ======= CONFIG =======
+  const N = 7;
+  const PAD = 18;
+  const CELL = Math.floor((canvas.width - PAD*2) / N);
+  const MIN_WORD_LEN_TILES = 2;
+
+  const TARGET_FILL = 0.90;
+  const SPAWN_PER_SUBMIT = 2;
+
+  const TRAY_MAX_SINGLE = 5;
+  const TRAY_MAX_DIGRAPH = 2;
+
+  const DIGRAPH_PROB = 0.22;
+
+  // ======= DICTIONARY (EXTERNAL) =======
+// Loads dict_full.txt (validation) and dict_common.txt (seeding/bias) from the same folder.
+// No user input required.
+let DICT_FULL = new Set();
+let DICT_COMMON = new Set();
+// Engine validates against DICT (kept for compatibility with existing code)
+let DICT = new Set();
+
+function refreshDictInfo(){
+  const full = DICT_FULL?.size || 0;
+  const common = DICT_COMMON?.size || 0;
+  ui.dictInfo.textContent = full ? `(full: ${full.toLocaleString()} / common: ${common.toLocaleString()})` : `(loading…)`;
+}
+
+function setMessage(text, kind="neutral"){
+  ui.msg.className = "msg" + (kind==="good" ? " good" : kind==="bad" ? " bad" : "");
+  ui.msg.textContent = text;
+}
+
+async function loadDictionaries(){
+  const [fullText, commonText] = await Promise.all([
+    fetch("dict_full.txt", {cache:"no-store"}).then(r => { if(!r.ok) throw new Error("dict_full.txt not found"); return r.text(); }),
+    fetch("dict_common.txt", {cache:"no-store"}).then(r => { if(!r.ok) throw new Error("dict_common.txt not found"); return r.text(); })
+  ]);
+
+  DICT_FULL = new Set(fullText.split(/\r?\n/).map(s => s.trim().toUpperCase()).filter(Boolean));
+  DICT_COMMON = new Set(commonText.split(/\r?\n/).map(s => s.trim().toUpperCase()).filter(Boolean));
+
+  DICT = DICT_FULL;
+  refreshDictInfo();
+  console.info("DICT sizes", {full: DICT_FULL.size, common: DICT_COMMON.size});
+}
+
+// ======= "DECK" MATH =======
+  const VOWELS = "AEIOU";
+  const VOWEL_BAG = "EEEEEEAAAAOOOIIIIIUU";
+  const CONS_BAG  = "TTTTNNNNRRRRSSSSHHHDDDLLLCCMMWWFFGGYYPPBBVVKKJXQZ";
+
+  const DIGRAPH_BAG = [
+    "TH","HE","IN","ER","AN","RE","ON","AT","EN","ND","TI","ES","OR","TE","OF","ED","IS","IT","AL","AR",
+    "ST","TO","NT","NG","SE","HA","AS","OU","EA","OO","AI","IE","CH","SH","WH","CK"
+  ];
+
+  const VOWEL_WINDOW = 30;
+  let spawnHistory = [];
+  function vowelRatio(){
+    if(!spawnHistory.length) return 0.38;
+    let v=0; for(const x of spawnHistory) if(x) v++;
+    return v / spawnHistory.length;
+  }
+  function recordSingle(ch){
+    spawnHistory.push(VOWELS.includes(ch));
+    if(spawnHistory.length > VOWEL_WINDOW) spawnHistory.shift();
+  }
+  function randFromBag(bag){ return bag[Math.floor(Math.random()*bag.length)]; }
+  function randSingle(){
+    const r = vowelRatio();
+    let pV = 0.38;
+    if(r < 0.32) pV = 0.62;
+    else if(r > 0.45) pV = 0.26;
+    const ch = (Math.random() < pV) ? randFromBag(VOWEL_BAG) : randFromBag(CONS_BAG);
+    recordSingle(ch);
+    return ch;
+  }
+  function randDigraph(){ return DIGRAPH_BAG[Math.floor(Math.random()*DIGRAPH_BAG.length)]; }
+
+  function makeTile(token){ return { token, isDigraph: token.length===2 }; }
+  function randTile(){
+    if(Math.random() < DIGRAPH_PROB) return makeTile(randDigraph());
+    return makeTile(randSingle());
+  }
+
+  // ======= POETIC GENERATION =======
+// Subtle bigram gravity + two hidden "ghost words" per round (B setting).
+
+const BIGRAM_BOOST = 3;
+const BIGRAMS = {
+  "T":["H"],
+  "H":["E","A","I","O"],
+  "E":["R","N","S","D","L","T"],
+  "A":["N","R","T","L","S"],
+  "I":["N","T","S"],
+  "O":["N","R","U"],
+  "N":["D","T","G","S"],
+  "R":["E","A","I","O"],
+  "S":["T","H","E"],
+  "C":["H"],
+  "Q":["U"]
+};
+
+function pickFromWeightedBag(bagStr, extraWeights){
+  // bagStr is a "bag" string like VOWEL_BAG. extraWeights is {A:2, H:3}
+  const counts = new Map();
+  for(const ch of bagStr) counts.set(ch, (counts.get(ch)||0) + 1);
+  if(extraWeights){
+    for(const [ch, w] of Object.entries(extraWeights)){
+      counts.set(ch, (counts.get(ch)||0) + w);
+    }
+  }
+  let total = 0;
+  for(const v of counts.values()) total += v;
+  let roll = Math.random() * total;
+  for(const [ch, v] of counts.entries()){
+    roll -= v;
+    if(roll <= 0) return ch;
+  }
+  return bagStr[Math.floor(Math.random()*bagStr.length)];
+}
+
+function neighborTokens(r,c){
+  const out = [];
+  for(let dr=-1; dr<=1; dr++){
+    for(let dc=-1; dc<=1; dc++){
+      if(dr===0 && dc===0) continue;
+      const rr = r+dr, cc = c+dc;
+      if(!inBounds(rr,cc)) continue;
+      const t = board?.[rr]?.[cc];
+      if(t && t.token) out.push(t.token);
+    }
+  }
+  return out;
+}
+
+function randSingleWithBias(r,c){
+  const neighTokens = neighborTokens(r,c);
+  const extra = {};
+
+  // vowel/consonant gentle balance based on neighbors
+  const vowels = new Set(["A","E","I","O","U"]);
+  let v=0,k=0;
+  for(const tok of neighTokens){
+    for(const ch of tok){
+      if(vowels.has(ch)) v++; else k++;
+    }
+  }
+  if(k - v >= 2){ extra["E"]=(extra["E"]||0)+2; extra["A"]=(extra["A"]||0)+1; extra["O"]=(extra["O"]||0)+1; }
+  if(v - k >= 2){ extra["N"]=(extra["N"]||0)+1; extra["R"]=(extra["R"]||0)+1; extra["T"]=(extra["T"]||0)+1; extra["S"]=(extra["S"]||0)+1; }
+
+  // bigram gravity: for each neighbor char, boost likely followers
+  for(const tok of neighTokens){
+    for(const ch of tok){
+      const nexts = BIGRAMS[ch];
+      if(!nexts) continue;
+      for(const nx of nexts){
+        extra[nx] = (extra[nx]||0) + BIGRAM_BOOST;
+      }
+      if(ch === "Q") extra["U"] = (extra["U"]||0) + 10;
+    }
+  }
+
+  // keep your vowel window logic, but pick from a weighted bag
+  const rV = vowelRatio();
+  let pV = 0.38;
+  if(rV < 0.32) pV = 0.62;
+  else if(rV > 0.45) pV = 0.26;
+
+  const baseBag = (Math.random() < pV) ? VOWEL_BAG : CONS_BAG;
+  const ch = pickFromWeightedBag(baseBag, extra);
+  recordSingle(ch);
+  return ch;
+}
+
+function randTileAt(r,c){
+  if(Math.random() < DIGRAPH_PROB) return makeTile(randDigraph());
+  return makeTile(randSingleWithBias(r,c));
+}
+
+// --- ghost words ---
+function pickCommonWord(minLen=3, maxLen=5){
+  if(!DICT_COMMON || DICT_COMMON.size===0) return null;
+  if(!pickCommonWord._arr || pickCommonWord._arrSize !== DICT_COMMON.size){
+    pickCommonWord._arr = Array.from(DICT_COMMON);
+    pickCommonWord._arrSize = DICT_COMMON.size;
+  }
+  const arr = pickCommonWord._arr;
+  for(let i=0;i<6000;i++){
+    const w = arr[(Math.random()*arr.length)|0];
+    if(w.length>=minLen && w.length<=maxLen) return w;
+  }
+  return null;
+}
+
+function randomWalkPath(len){
+  let r = (Math.random()*N)|0;
+  let c = (Math.random()*N)|0;
+  const path = [{r,c}];
+  const used = new Set([r+","+c]);
+  const dirs = [
+    {dr:1,dc:0},{dr:-1,dc:0},{dr:0,dc:1},{dr:0,dc:-1},
+    {dr:1,dc:1},{dr:1,dc:-1},{dr:-1,dc:1},{dr:-1,dc:-1}
+  ];
+  for(let i=1;i<len;i++){
+    const options = [];
+    for(const d of dirs){
+      const rr=r+d.dr, cc=c+d.dc;
+      if(!inBounds(rr,cc)) continue;
+      const key = rr+","+cc;
+      if(used.has(key)) continue;
+      options.push({r:rr,c:cc});
+    }
+    if(!options.length) return null;
+    const nxt = options[(Math.random()*options.length)|0];
+    r=nxt.r; c=nxt.c;
+    used.add(r+","+c);
+    path.push({r,c});
+  }
+  return path;
+}
+
+function seedGhostWords(count=2){
+  for(let i=0;i<count;i++){
+    const w = pickCommonWord(3,5);
+    if(!w) continue;
+    let path = null;
+    for(let t=0;t<30;t++){
+      path = randomWalkPath(w.length);
+      if(path) break;
+    }
+    if(!path) continue;
+    for(let k=0;k<w.length;k++){
+      const p = path[k];
+      board[p.r][p.c] = makeTile(w[k]); // seed as single-letter tiles
+    }
+  }
+}
+
+// ======= STATE =======
+  let board, tray, selectedPath, score, round;
+  let scarTTL; // 2D int: rounds remaining an empty burn-cell stays unfilled
+
+
+  // Drag state
+  let drag = null;
+  const DRAG_THRESHOLD = 6;
+
+
+  // Anti-shuffle rule: after saving a tile, you may slide ONE board tile into the gap,
+  // then you must attempt a word (Submit) before saving or moving tray tiles again.
+  let saveLock = false;           // true after Board→Tray until a word attempt
+  let nudgeHole = null;           // {r,c} hole created by last save
+  let nudgeAvailable = false;     // allow one Board→Board move into that hole
+  let nudgeUsed = false;
+
+  // ======= GEOMETRY =======
+  function inBounds(r,c){ return r>=0 && r<N && c>=0 && c<N; }
+  function isAdjacent(a,b){
+    const dr = Math.abs(a.r - b.r);
+    const dc = Math.abs(a.c - b.c);
+    return (dr<=1 && dc<=1 && (dr+dc)>0);
+  }
+  function inPath(r,c){ return selectedPath.some(p => p.r===r && p.c===c); }
+
+  function mouseToCanvas(ev){
+    const rect = canvas.getBoundingClientRect();
+    const x = (ev.clientX - rect.left) * (canvas.width / rect.width);
+    const y = (ev.clientY - rect.top) * (canvas.height / rect.height);
+    return {x,y};
+  }
+  function cellFromCanvasXY(x,y){
+    const c = Math.floor((x - PAD)/CELL);
+    const r = Math.floor((y - PAD)/CELL);
+    if(!inBounds(r,c)) return null;
+    return {r,c};
+  }
+
+  function rr(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y,   x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x,   y+h, r);
+    ctx.arcTo(x,   y+h, x,   y,   r);
+    ctx.arcTo(x,   y,   x+w, y,   r);
+    ctx.closePath();
+  }
+
+  // ======= TRAY CAPS =======
+  function trayCounts(){
+    let singles=0, digs=0;
+    for(const t of tray){
+      if(!t) continue;
+      if(t.isDigraph) digs++; else singles++;
+    }
+    return {singles,digs};
+  }
+  function canAddToTray(tile){
+    const {singles,digs} = trayCounts();
+    if(tile.isDigraph) return digs < TRAY_MAX_DIGRAPH;
+    return singles < TRAY_MAX_SINGLE;
+  }
+  function firstEmptyTraySlot(isDigraph){
+    const start = isDigraph ? 5 : 0;
+    const end = isDigraph ? 7 : 5;
+    for(let i=start;i<end;i++) if(!tray[i]) return i;
+    return -1;
+  }
+  function addToTray(tile){
+    const idx = firstEmptyTraySlot(tile.isDigraph);
+    if(idx<0) return false;
+    tray[idx] = tile;
+    return true;
+  }
+
+  // ======= BOARD HELPERS =======
+  function filledCount(){
+    let n=0;
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(board[r][c]) n++;
+    return n;
+  }
+  function emptyCells(){
+    const out=[];
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+      if(!board[r][c] && scarTTL[r][c]===0) out.push({r,c});
+    }
+    return out;
+  }
+  function scoreEmpty(r,c){
+    let n=0;
+    for(let dr=-1; dr<=1; dr++) for(let dc=-1; dc<=1; dc++){
+      if(dr===0 && dc===0) continue;
+      const rr=r+dr, cc=c+dc;
+      if(inBounds(rr,cc) && board[rr][cc]) n++;
+    }
+    return n;
+  }
+  function weightedPick(cells){
+    const weights = cells.map(p => 1 + Math.pow(scoreEmpty(p.r,p.c), 2));
+    const sum = weights.reduce((a,b)=>a+b,0);
+    let r = Math.random()*sum;
+    for(let i=0;i<cells.length;i++){
+      r -= weights[i];
+      if(r<=0) return cells[i];
+    }
+    return cells[cells.length-1];
+  }
+  function emptyNeighbors(r,c){
+    const out=[];
+    for(let dr=-1; dr<=1; dr++) for(let dc=-1; dc<=1; dc++){
+      if(dr===0 && dc===0) continue;
+      const rr=r+dr, cc=c+dc;
+      if(inBounds(rr,cc) && !board[rr][cc]) out.push({r:rr,c:cc});
+    }
+    return out;
+  }
+
+  function fillToTarget(){
+    const total = N*N;
+    const target = Math.floor(total * TARGET_FILL);
+    let need = Math.max(0, target - filledCount());
+    if(need<=0) return;
+
+    const emptiesAll = emptyCells();
+    if(!emptiesAll.length) return;
+
+    const adjacentEmpties = emptiesAll.filter(p => scoreEmpty(p.r,p.c) > 0);
+    let seedPool = adjacentEmpties.length ? adjacentEmpties : emptiesAll;
+    let seed = weightedPick(seedPool);
+
+    while(need>0 && seed){
+      board[seed.r][seed.c] = randTileAt(seed.r, seed.c);
+      need--;
+
+      if(need<=0) break;
+      const neigh = emptyNeighbors(seed.r, seed.c);
+      if(neigh.length) seed = weightedPick(neigh);
+      else{
+        const empties = emptyCells();
+        if(!empties.length) break;
+        const adj2 = empties.filter(p => scoreEmpty(p.r,p.c) > 0);
+        seed = weightedPick(adj2.length ? adj2 : empties);
+      }
+    }
+  }
+
+  function afterSubmitDeal(){
+    // decay porous burn-scars (empty cells) over time
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(scarTTL[r][c]>0) scarTTL[r][c]-=1;
+
+    round += 1;
+    fillToTarget();
+    let spawned = 0;
+    const empties = emptyCells();
+    while(spawned < SPAWN_PER_SUBMIT && empties.length){
+      const p = empties.splice(Math.floor(Math.random()*empties.length),1)[0];
+      board[p.r][p.c] = randTileAt(p.r, p.c);
+      spawned++;
+    }
+    fillToTarget();
+    seedGhostWords(2);
+  }
+
+  function updateUI(){
+    ui.round.textContent = String(round);
+    ui.score.textContent = String(score);
+    residuaRender();
+    const {singles,digs} = trayCounts();
+    ui.trayCt.textContent = `${singles+digs}/${TRAY_MAX_SINGLE+TRAY_MAX_DIGRAPH}`;
+    ui.selCt.textContent = String(selectedPath.length);
+
+    ui.btnSubmit.disabled = selectedPath.length < MIN_WORD_LEN_TILES;
+    ui.btnClear.disabled = selectedPath.length === 0;
+
+    renderTray();
+  }
+
+  function renderTray(){
+    ui.tray.innerHTML = "";
+    const labels = ["S1","S2","S3","S4","S5","DG1","DG2"];
+    for(let i=0;i<7;i++){
+      const slot = document.createElement("div");
+      slot.className = "slot" + (tray[i] ? " filled" : "");
+      slot.dataset.idx = String(i);
+
+      const tag = document.createElement("div");
+      tag.className = "tag";
+      tag.textContent = labels[i];
+      slot.appendChild(tag);
+
+      if(tray[i]){
+        slot.textContent = tray[i].token;
+        slot.appendChild(tag);
+
+        const mini = document.createElement("div");
+        mini.className = "mini";
+        mini.textContent = tray[i].isDigraph ? "DG" : "1";
+        slot.appendChild(mini);
+
+        slot.addEventListener("pointerdown", (ev) => {
+          ev.preventDefault();
+          const cx = ev.clientX, cy = ev.clientY;
+          drag = { source:"tray", idx:i, tile: tray[i], x:cx, y:cy, startX:cx, startY:cy, moved:false };
+          slot.setPointerCapture(ev.pointerId);
+        });
+      }else{
+        slot.textContent = "";
+      }
+
+      ui.tray.appendChild(slot);
+    }
+  }
+
+  function reset(){
+    board = Array.from({length:N}, () => Array.from({length:N}, () => null));
+    scarTTL = Array.from({length:N}, ()=>Array(N).fill(0));
+    tray = Array.from({length:7}, () => null);
+    selectedPath = [];
+    score = 0;
+    round = 1;
+    residuaReset();
+    spawnHistory = [];
+    saveLock = false;
+    nudgeHole = null;
+    nudgeAvailable = false;
+    nudgeUsed = false;
+
+    fillToTarget();
+    seedGhostWords(2);
+    setMessage("Ready. Drag board ↔ tray; click tiles to select a word path.", "neutral");
+    updateUI();
+  }
+
+  // ======= INPUT =======
+  canvas.addEventListener("pointerdown", (ev) => {
+    const {x,y} = mouseToCanvas(ev);
+    const cell = cellFromCanvasXY(x,y);
+    if(!cell) return;
+    const t = board[cell.r][cell.c];
+    if(!t) return;
+    drag = { source:"board", r:cell.r, c:cell.c, tile:t, x:ev.clientX, y:ev.clientY, startX:ev.clientX, startY:ev.clientY, moved:false };
+    canvas.setPointerCapture(ev.pointerId);
+  });
+
+  canvas.addEventListener("pointermove", (ev) => {
+    if(!drag) return;
+    const dx = ev.clientX - drag.startX;
+    const dy = ev.clientY - drag.startY;
+    if(!drag.moved && Math.hypot(dx,dy) > DRAG_THRESHOLD) drag.moved = true;
+    drag.x = ev.clientX; drag.y = ev.clientY;
+  });
+
+  // Keep drag coordinates updating even when the pointer is over the panel/tray (tray drag needs this).
+  window.addEventListener("pointermove", (ev) => {
+    if(!drag) return;
+    const dx = ev.clientX - drag.startX;
+    const dy = ev.clientY - drag.startY;
+    if(!drag.moved && Math.hypot(dx,dy) > DRAG_THRESHOLD) drag.moved = true;
+    drag.x = ev.clientX;
+    drag.y = ev.clientY;
+  }, {capture:true});
+
+  function overTray(){
+    const r = ui.tray.getBoundingClientRect();
+    return drag && drag.x >= r.left && drag.x <= r.right && drag.y >= r.top && drag.y <= r.bottom;
+  }
+
+  function handleDrop(){
+    if(!drag) return;
+
+    // If you've just saved a tile, tray moves are locked until you attempt a word.
+    if(saveLock && drag.source === "tray"){
+      setMessage("Try a word before moving saved tiles again.", "bad");
+      drag = null;
+      return;
+    }
+
+    // Click-to-select
+    if(!drag.moved && drag.source === "board"){
+      const p = {r:drag.r, c:drag.c};
+      if(inPath(p.r,p.c)){ setMessage("No repeats in a word.", "bad"); drag=null; updateUI(); return; }
+      if(selectedPath.length){
+        const last = selectedPath[selectedPath.length-1];
+        if(!isAdjacent(last, p)){ setMessage("Path must stay connected (8-way).", "bad"); drag=null; updateUI(); return; }
+      }
+      selectedPath.push(p);
+      drag=null; updateUI(); return;
+    }
+    if(!drag.moved && drag.source === "tray"){ drag=null; return; }
+
+    // Board -> tray
+    if(drag.source === "board" && overTray()){
+      if(saveLock){
+        setMessage("Try a word before saving another tile.", "bad");
+        drag=null; return;
+      }
+
+      const tile = board[drag.r][drag.c];
+      if(!tile){ drag=null; return; }
+      if(!canAddToTray(tile)){ setMessage(tile.isDigraph ? "Tray digraph slots are full (2 max)." : "Tray single slots are full (5 max).", "bad"); drag=null; return; }
+      if(addToTray(tile)){
+        board[drag.r][drag.c] = null;
+        // Lock saving/tray shuffles until the next word attempt, but allow one board slide into this gap.
+        saveLock = true;
+        nudgeHole = {r: drag.r, c: drag.c};
+        nudgeAvailable = true;
+        nudgeUsed = false;
+        selectedPath = selectedPath.filter(p => !(p.r===drag.r && p.c===drag.c));
+        setMessage(`Saved ${tile.token}. You may slide ONE board tile into the gap, then try a word.`, "good");
+        updateUI();
+      }
+      drag=null; return;
+    }
+
+    // Tray -> board
+    if(drag.source === "tray"){
+      const rect = canvas.getBoundingClientRect();
+      const overCanvas = drag.x >= rect.left && drag.x <= rect.right && drag.y >= rect.top && drag.y <= rect.bottom;
+      if(overCanvas){
+        const {x,y} = mouseToCanvas({clientX:drag.x, clientY:drag.y});
+        const cell = cellFromCanvasXY(x,y);
+        if(cell){
+          const held = tray[drag.idx];
+          if(!held){ drag=null; return; }
+          const target = board[cell.r][cell.c];
+          board[cell.r][cell.c] = held;
+          tray[drag.idx] = target ? target : null;
+          if(target){
+            selectedPath = selectedPath.filter(p => !(p.r===cell.r && p.c===cell.c));
+            setMessage(`Swapped ${held.token} ↔ ${target.token}.`, "neutral");
+          }else{
+            setMessage(`Placed ${held.token} onto board.`, "neutral");
+          }
+          updateUI();
+        }
+      }
+      drag=null; return;
+    }
+    // Board -> board (one-time "nudge" into the hole after saving)
+    if(drag.source === "board"){
+      const rect = canvas.getBoundingClientRect();
+      const overCanvas = drag.x >= rect.left && drag.x <= rect.right && drag.y >= rect.top && drag.y <= rect.bottom;
+      if(overCanvas && saveLock && nudgeAvailable && !nudgeUsed && nudgeHole){
+        const {x,y} = mouseToCanvas({clientX:drag.x, clientY:drag.y});
+        const cell = cellFromCanvasXY(x,y);
+        if(cell && cell.r===nudgeHole.r && cell.c===nudgeHole.c && !board[cell.r][cell.c]){
+          // Move exactly one board tile into the gap
+          const tile = board[drag.r][drag.c];
+          board[cell.r][cell.c] = tile;
+          board[drag.r][drag.c] = null;
+
+          // Remove any selected points that were moved/cleared to avoid weirdness
+          selectedPath = selectedPath.filter(p => !(
+            (p.r===drag.r && p.c===drag.c) || (p.r===cell.r && p.c===cell.c)
+          ));
+
+          nudgeUsed = true;
+          nudgeAvailable = false;
+          nudgeHole = null;
+
+          setMessage(`Slid ${tile.token} into the gap. Now try a word.`, "neutral");
+          updateUI();
+          drag=null; return;
+        }else if(cell){
+          setMessage("You can only slide one board tile into the gap you made.", "bad");
+        }
+      }
+    }
+
+
+
+    drag=null;
+  }
+
+  canvas.addEventListener("pointerup", () => handleDrop());
+  canvas.addEventListener("pointercancel", () => { drag=null; });
+  window.addEventListener("pointerup", () => { if(drag) handleDrop(); }, {capture:true});
+
+  // ======= BUTTONS =======
+  ui.btnClear.onclick = () => { selectedPath = []; updateUI(); };
+  ui.btnSubmit.onclick = () => {
+    if(selectedPath.length < MIN_WORD_LEN_TILES){ setMessage(`Select at least ${MIN_WORD_LEN_TILES} tiles to submit.`, "bad"); return; }
+
+    const tokens = selectedPath.map(p => board[p.r][p.c].token);
+    const word = tokens.join("").toUpperCase();
+    const tiles = selectedPath.length;
+    const letters = tokens.reduce((s,t)=>s+t.length, 0);
+
+    const isWord = DICT.has(word);
+    const delta = isWord
+      ? (tiles*10 + 5*letters*letters)
+      : -(8 + tiles*12); // stronger consequence for failed / intentional burns
+
+    score += delta;
+    residuaApplyDelta(delta);
+
+    for(const p of selectedPath) board[p.r][p.c] = null;
+    if(!isWord){
+      // Porous scar: leave some empty spaces for 2 rounds (break adjacency, but can be filled via tray swaps if your rules allow)
+      const scarCount = Math.min(Math.floor(tiles/5), tiles);
+      if(scarCount>0){
+        const picks = selectedPath.slice();
+        for(let i=picks.length-1;i>0;i--){
+          const j=Math.floor(Math.random()*(i+1));
+          [picks[i],picks[j]]=[picks[j],picks[i]];
+        }
+        for(let i=0;i<scarCount;i++){
+          const p = picks[i];
+          scarTTL[p.r][p.c] = 2; // persists for 2 rounds
+          board[p.r][p.c] = null;
+        }
+      }
+    }
+
+    selectedPath = [];
+
+    setMessage(isWord ? `"${word}" accepted (+${delta})` : `"${word}" rejected (${delta})`, isWord ? "good" : "bad");
+    
+    // Word attempt resets the save-lock cycle
+    saveLock = false;
+    nudgeHole = null;
+    nudgeAvailable = false;
+    nudgeUsed = false;
+afterSubmitDeal();
+    updateUI();
+  };
+  ui.btnRestart.onclick = () => reset();
+
+  // ======= RENDER =======
+  function drawTileAt(token, isDigraph, x, y, selected=false, alpha=1){
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = selected ? getComputedStyle(document.documentElement).getPropertyValue('--tileSel') : getComputedStyle(document.documentElement).getPropertyValue('--tile');
+    rr(x+4, y+4, CELL-8, CELL-8, 12);
+    ctx.fill();
+
+    if(isDigraph){
+      ctx.save();
+      ctx.globalAlpha = 0.55*alpha;
+      ctx.fillStyle = "#223242";
+      ctx.beginPath();
+      ctx.moveTo(x+CELL-18, y+8);
+      ctx.lineTo(x+CELL-8,  y+8);
+      ctx.lineTo(x+CELL-8,  y+18);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--stroke');
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = "#e6edf3";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = isDigraph ? "900 18px system-ui, -apple-system, Segoe UI, Roboto, Arial" : "900 22px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.fillText(token, x + CELL/2, y + CELL/2 + 1);
+    ctx.restore();
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // grid
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = "#1f2630";
+    for(let i=0;i<=N;i++){
+      const x = PAD + i*CELL;
+      const y = PAD + i*CELL;
+      ctx.beginPath(); ctx.moveTo(x, PAD); ctx.lineTo(x, PAD + N*CELL); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(PAD + N*CELL, y); ctx.stroke();
+    }
+    ctx.restore();
+
+    for(let r=0;r<N;r++){
+      for(let c=0;c<N;c++){
+        const t = board[r][c];
+        if(!t) continue;
+        if(drag && drag.source==="board" && drag.moved && drag.r===r && drag.c===c) continue;
+        const x = PAD + c*CELL;
+        const y = PAD + r*CELL;
+        drawTileAt(t.token, t.isDigraph, x, y, inPath(r,c));
+      }
+    }
+
+    if(selectedPath.length){
+      ctx.save();
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent');
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      selectedPath.forEach((p,i)=>{
+        const cx = PAD + p.c*CELL + CELL/2;
+        const cy = PAD + p.r*CELL + CELL/2;
+        if(i===0) ctx.moveTo(cx,cy);
+        else ctx.lineTo(cx,cy);
+      });
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if(drag && drag.moved){
+      const rect = canvas.getBoundingClientRect();
+      const cx = (drag.x - rect.left) * (canvas.width / rect.width);
+      const cy = (drag.y - rect.top) * (canvas.height / rect.height);
+      drawTileAt(drag.tile.token, drag.tile.isDigraph, cx - CELL/2, cy - CELL/2, false, 0.85);
+    }
+
+    requestAnimationFrame(draw);
+  }
+
+  try{
+    refreshDictInfo();
+    setMessage("Loading dictionaries…", "neutral");
+    await loadDictionaries();
+    setMessage("Ready. Drag board ↔ tray; click tiles to select a word path.", "neutral");
+  }catch(e){
+    console.error(e);
+    setMessage("Could not load external dictionaries. Check dict_full.txt and dict_common.txt.", "bad");
+  }
+  reset();
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+
+</html>

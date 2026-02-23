@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>TileWord – External Dictionaries</title>
+<style>
+:root{
+  --bg:#0f1216; --panel:#151a20; --line:#222a35; --ink:#e6edf3;
+  --tile:#161d26; --tileSel:#1a3347; --stroke:#2a3442;
+}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui;}
+.wrap{max-width:1100px;margin:20px auto;display:flex;gap:20px;}
+canvas{background:#0b0e12;border:1px solid var(--line);border-radius:14px;}
+.panel{min-width:320px}
+.msg{margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:10px;}
+button{margin-top:10px;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:#11161d;color:#fff;cursor:pointer;}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <canvas id="c" width="560" height="560"></canvas>
+  <div class="panel">
+    <div class="msg" id="msg">Gathering words…</div>
+    <div>Score: <span id="score">0</span></div>
+    <button id="submit">Submit</button>
+    <button id="clear">Clear</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const msg = document.getElementById("msg");
+const scoreEl = document.getElementById("score");
+const btnSubmit = document.getElementById("submit");
+const btnClear = document.getElementById("clear");
+
+const N = 7;
+const PAD = 18;
+const CELL = Math.floor((canvas.width - PAD*2)/N);
+
+let board = [];
+let selected = [];
+let score = 0;
+
+let DICT_FULL = new Set();
+let DICT_COMMON = new Set();
+
+async function loadDictionaries(){
+  const [fullText, commonText] = await Promise.all([
+    fetch("dict_full.txt").then(r=>r.text()),
+    fetch("dict_common.txt").then(r=>r.text())
+  ]);
+  DICT_FULL = new Set(fullText.split(/\r?\n/).filter(Boolean));
+  DICT_COMMON = new Set(commonText.split(/\r?\n/).filter(Boolean));
+}
+
+function randLetter(){
+  const letters = "EEEEEEEAAAAAAIIIIIIOOOOONNNNRRRRSSSSTTTTLLLLDDCCMMBBPPGGHHYYKJVXZ";
+  return letters[Math.floor(Math.random()*letters.length)];
+}
+
+function fillBoard(){
+  board = Array.from({length:N},()=>Array.from({length:N},()=>randLetter()));
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(let r=0;r<N;r++){
+    for(let c=0;c<N;c++){
+      const x = PAD + c*CELL;
+      const y = PAD + r*CELL;
+      ctx.fillStyle = selected.some(p=>p.r===r&&p.c===c) ? "#1a3347" : "#161d26";
+      ctx.fillRect(x,y,CELL-4,CELL-4);
+      ctx.fillStyle="#fff";
+      ctx.font="bold 20px system-ui";
+      ctx.textAlign="center";
+      ctx.textBaseline="middle";
+      ctx.fillText(board[r][c],x+(CELL-4)/2,y+(CELL-4)/2);
+    }
+  }
+}
+
+function mouseToCell(e){
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const c = Math.floor((x-PAD)/CELL);
+  const r = Math.floor((y-PAD)/CELL);
+  if(r>=0&&r<N&&c>=0&&c<N) return {r,c};
+  return null;
+}
+
+canvas.addEventListener("click",(e)=>{
+  const cell = mouseToCell(e);
+  if(!cell) return;
+  if(selected.some(p=>p.r===cell.r&&p.c===cell.c)) return;
+  selected.push(cell);
+  draw();
+});
+
+btnClear.onclick = ()=>{
+  selected=[];
+  draw();
+};
+
+btnSubmit.onclick = ()=>{
+  if(selected.length<2) return;
+  const word = selected.map(p=>board[p.r][p.c]).join("");
+  if(DICT_FULL.has(word)){
+    score += word.length*10;
+    msg.textContent = `"${word}" accepted.`;
+    selected.forEach(p=>board[p.r][p.c]=randLetter());
+  }else{
+    msg.textContent = `"${word}" rejected.`;
+  }
+  selected=[];
+  scoreEl.textContent = score;
+  draw();
+};
+
+(async function boot(){
+  try{
+    await loadDictionaries();
+    msg.textContent = `Ready. ${DICT_FULL.size.toLocaleString()} words loaded.`;
+  }catch(e){
+    console.error(e);
+    msg.textContent = "Dictionary failed to load.";
+  }
+  fillBoard();
+  draw();
+})();
+</script>
+
+</body>
+</html>

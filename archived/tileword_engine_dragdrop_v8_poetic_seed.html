@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TileWord – Drag & Drop + Dictionary Loader</title>
+  <style>
+    :root{
+      --bg:#0f1216; --panel:#151a20; --line:#222a35; --ink:#e6edf3; --muted:#9aa7b5;
+      --tile:#161d26; --tileSel:#1a3347; --stroke:#2a3442;
+      --accent:rgba(139,211,255,0.85);
+      --good:#7dffb2; --bad:#ff8b8b;
+    }
+    html,body{height:100%; margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:var(--ink);}
+    .wrap{max-width:1120px; margin:0 auto; padding:16px;}
+    .row{display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap;}
+    canvas{background:#0b0e12; border:1px solid var(--line); border-radius:14px; box-shadow:0 8px 24px rgba(0,0,0,0.35); touch-action:none;}
+    .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px; box-shadow:0 8px 24px rgba(0,0,0,0.25); min-width:350px;}
+    .stats{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;}
+    .stat{background:#11161d; border:1px solid var(--line); border-radius:12px; padding:10px;}
+    .stat .k{font-size:12px; color:var(--muted);}
+    .stat .v{font-size:18px; font-weight:850; margin-top:2px;}
+    .controls{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;}
+    button{background:#11161d; border:1px solid #2a3442; color:var(--ink); padding:10px 12px; border-radius:12px; cursor:pointer; font-weight:760;}
+    button:hover{border-color:#3b4a5f;}
+    button.primary{background:#13202b; border-color:#27465f; color:#d9f1ff;}
+    button:disabled{opacity:0.45; cursor:not-allowed;}
+
+    .trayWrap{margin-top:8px;}
+    .trayHeader{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin:6px 0;}
+    .trayHeader .hint{font-size:12px; color:var(--muted);}
+    .tray{display:grid; grid-template-columns:repeat(7, 1fr); gap:8px; padding:10px; background:#10151c; border:1px solid var(--line); border-radius:12px; user-select:none;}
+    .slot{height:44px; border-radius:12px; border:1px dashed #2a3442; display:flex; align-items:center; justify-content:center; color:#90a0b3; position:relative; user-select:none;}
+    .slot.filled{border-style:solid; border-color:#2a3442; background:#1f2630; color:var(--ink); font-weight:900;}
+    .slot .tag{position:absolute; left:8px; top:6px; font-size:10px; color:#9aa7b5; opacity:0.85; font-weight:800;}
+    .slot .mini{position:absolute; right:8px; bottom:6px; font-size:10px; color:#a9b8c8; opacity:0.75;}
+    .slot.filled:hover{outline:2px solid rgba(139,211,255,0.35);}
+
+    .msg{margin-top:10px; padding:10px 12px; border-radius:12px; border:1px solid #2a3442; background:#0f151c; color:#cfe6f6;}
+    .msg.good{border-color:#2d6248; background:#0f1b14; color:#d7ffe8;}
+    .msg.bad{border-color:#6a2d2d; background:#1b0f10; color:#ffd7d7;}
+
+    .rules{margin-top:10px; font-size:12px; color:#a6b3c0; line-height:1.35;}
+    .rules code{background:#0f151c; border:1px solid #273141; border-radius:8px; padding:1px 6px;}
+
+    .dictRow{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:8px 0 2px;}
+    .dictRow label{font-size:12px; color:var(--muted);}
+    .dictRow input[type="file"]{font-size:12px; color:var(--muted);}
+    .pill{font-size:12px; color:var(--muted); border:1px solid var(--line); background:#10151c; padding:6px 10px; border-radius:999px;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row">
+      <canvas id="c" width="560" height="560"></canvas>
+      <div class="panel">
+        <div class="stats">
+          <div class="stat"><div class="k">Round</div><div class="v" id="round">1</div></div>
+          <div class="stat"><div

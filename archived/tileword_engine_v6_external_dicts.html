@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>TileWord – Native External Dictionaries</title>
+<style>
+body{margin:0;background:#0f1216;color:#e6edf3;font-family:system-ui;}
+.wrap{max-width:1000px;margin:20px auto;}
+canvas{background:#0b0e12;border:1px solid #222a35;border-radius:14px;}
+.msg{margin-top:12px;padding:10px;border:1px solid #2a3442;border-radius:10px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<canvas id="c" width="560" height="560"></canvas>
+<div class="msg" id="msg">Loading dictionaries…</div>
+</div>
+
+<script>
+let DICT_FULL = new Set();
+let DICT_COMMON = new Set();
+
+async function loadDictionaries(){
+    const fullText = await fetch("dict_full.txt").then(r=>r.text());
+    const commonText = await fetch("dict_common.txt").then(r=>r.text());
+    DICT_FULL = new Set(fullText.split(/\r?\n/).filter(Boolean));
+    DICT_COMMON = new Set(commonText.split(/\r?\n/).filter(Boolean));
+}
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const msg = document.getElementById("msg");
+
+const N = 7;
+const PAD = 18;
+const CELL = Math.floor((canvas.width - PAD*2)/N);
+let board = [];
+let selected = [];
+let score = 0;
+
+function randLetter(){
+    const letters = "EEEEEEEAAAAAAIIIIIIOOOOONNNNRRRRSSSSTTTTLLLLDDCCMMBBPPGGHHYYKJVXZ";
+    return letters[Math.floor(Math.random()*letters.length)];
+}
+
+function fillBoard(){
+    board = Array.from({length:N},()=>Array.from({length:N},()=>randLetter()));
+}
+
+function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    for(let r=0;r<N;r++){
+        for(let c=0;c<N;c++){
+            const x = PAD + c*CELL;
+            const y = PAD + r*CELL;
+            ctx.fillStyle="#161d26";
+            ctx.fillRect(x,y,CELL-4,CELL-4);
+            ctx.fillStyle="#fff";
+            ctx.font="bold 20px system-ui";
+            ctx.textAlign="center";
+            ctx.textBaseline="middle";
+            ctx.fillText(board[r][c],x+(CELL-4)/2,y+(CELL-4)/2);
+        }
+    }
+}
+
+(async function boot(){
+    try{
+        await loadDictionaries();
+        msg.textContent = "Ready. Dictionaries loaded.";
+    }catch(e){
+        msg.textContent = "Could not load dictionaries. Make sure dict_full.txt and dict_common.txt are in the same folder and you are running via a local server.";
+        console.error(e);
+    }
+    fillBoard();
+    draw();
+})();
+</script>
+</body>
+</html>
