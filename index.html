@@ -243,7 +243,26 @@
       .wrap.residuaClean canvas#c{ max-height: 52dvh; } /* tighter for phones */
     }
 
-  </style>
+  
+/* --- Fix truncated R / S / Tray / Sel pills --- */
+.residuaHeader{
+  overflow: visible;
+}
+
+.scoreMeta{
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.scoreMeta .metaItem{
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+</style>
 
 <style>
 #submitButton {
@@ -323,31 +342,110 @@ button.primary{
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
 }
 
+
+/* ===== Flattened UI + scoreline-integrated stats ===== */
+.wrap.residuaClean{
+  gap: 6px;
+  padding: 6px;
+}
+
+/* Flatten panels: reduce padding, kill big shadows */
+.wrap.residuaClean .residuaLineWrap,
+.wrap.residuaClean .trayWrap,
+.wrap.residuaClean .msg,
+.wrap.residuaClean .controlsRow .controls,
+.wrap.residuaClean .rules{
+  margin: 0;
+  box-shadow: none !important;
+}
+
+/* Make the scoreline block feel like one flat strip */
+.wrap.residuaClean .residuaLineWrap{
+  padding: 8px 10px;
+  border-radius: 12px; /* subtle, not puffy */
+}
+
+/* Header with integrated stats (Round/Score/Tray/Sel) */
+.wrap.residuaClean .residuaHeader{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.wrap.residuaClean .scoreMeta{
+  display:flex;
+  flex-wrap:wrap;
+  gap: 10px;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  color: rgba(230,237,243,0.88);
+}
+.wrap.residuaClean .scoreMeta .metaItem{
+  display:inline-flex;
+  gap: 6px;
+  align-items:baseline;
+  padding: 2px 8px;
+  border: 1px solid rgba(42,75,115,0.55);
+  border-radius: 999px;
+  background: rgba(7,12,22,0.20);
+}
+.wrap.residuaClean .scoreMeta b{
+  font-weight: 800;
+  color: rgba(234,246,255,0.98);
+}
+
+/* Tighten tray + message padding so the whole stack reads "flat" */
+.wrap.residuaClean .trayWrap{ padding: 10px 10px 8px; border-radius: 12px; }
+.wrap.residuaClean .msg{ padding: 10px 10px; border-radius: 12px; }
+.wrap.residuaClean .controlsRow .controls button{ border-radius: 12px; }
+.wrap.residuaClean .rules{ padding: 10px 10px; border-radius: 12px; }
+
+/* Remove page-level outer scroll feel (stage handles fit) */
+body{ margin:0; }
+
+/* --- Fix truncated R / S / Tray / Sel pills --- */
+.residuaHeader{
+  overflow: visible;
+}
+
+.scoreMeta{
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.scoreMeta .metaItem{
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 </style>
 
 </head>
 
 <body>
   <div class="wrap residuaClean">
-    <div class="topStrip">
-      <div class="stats">
-        <div class="stat"><div class="k">Round</div><div class="v" id="round">1</div></div>
-        <div class="stat"><div class="k">Score</div><div class="v" id="score">0</div></div>
-        <div class="stat"><div class="k">Tray</div><div class="v" id="trayCt">0</div></div>
-        <div class="stat"><div class="k">Selection</div><div class="v" id="selCt">0</div></div>
-      
-  </div>
-      <div class="dictRow">
-        <label>Dictionaries:</label>
-        <span class="pill" id="dictInfo">(loading…)</span>
-        <input id="dictFile" type="file" accept=".txt" style="display:none" disabled/>
-      </div>
-    </div> 
-
-    <canvas id="c" width="640" height="640"></canvas>
+    <div class="dictRow" style="display:none">
+      <label>Dictionaries:</label>
+      <span class="pill" id="dictInfo">(loading…)</span>
+      <input id="dictFile" type="file" accept=".txt" style="display:none" disabled/>
+    </div>
+<canvas id="c" width="640" height="640"></canvas>
 
     <!-- Residua scoreline (net vs spend) -->
 <div class="residuaLineWrap" aria-label="Residua scoring bar">
+        <div class="residuaHeader">
+          <div class="scoreMeta" aria-label="Session stats">
+            <span class="metaItem">Round<b id="round">1</b></span>
+            <span class="metaItem">Sscore <b id="score">0</b></span>
+            <span class="metaItem">Tray <b id="trayCt">0</b></span>
+            <span class="metaItem">Sel <b id="selCt">0</b></span>
+          </div>
+        </div>
+
         <div class="residuaLine">
           <div class="residuaZero" title="0"></div>
           <div class="residuaPos" id="residuaPos" title="Net score (right)"></div>
